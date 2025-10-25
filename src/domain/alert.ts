@@ -47,6 +47,7 @@ export interface EnrichedAlertPayload {
 export interface MetricPoint {
   ts: string;
   value: string;
+  oficial_fx_source?: string;
 }
 
 export interface MetricPointsResponse {
@@ -59,6 +60,7 @@ export interface MetricSummary {
   metric_id: string;
   ts: string;
   value: string;
+  oficial_fx_source?: string;
 }
 
 export interface LatestMetricsResponse {

@@ -69,7 +69,7 @@ Cada alerta incluye un payload enriquecido con información detallada:
 - **`units`**: Unidades de la métrica (ratio, percentage)
 - **`inputs`**: Fuentes de datos utilizadas
 - **`base_ts`**: Timestamp base de la métrica
-- **`oficial_fx_source`**: Fuente del tipo de cambio oficial
+- **`oficial_fx_source`**: Fuente del tipo de cambio (bcra, mep, blue, null)
 - **`notes`**: Notas adicionales sobre la alerta
 
 ## Política de Deduplicación

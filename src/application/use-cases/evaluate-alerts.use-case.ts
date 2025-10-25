@@ -10,6 +10,7 @@ interface MetricData {
   value: number;
   ts: string;
   trendValues?: number[];
+  oficial_fx_source?: string;
 }
 
 export class EvaluateAlertsUseCase {
@@ -123,6 +124,7 @@ export class EvaluateAlertsUseCase {
       value: parseFloat(latestPoint.value),
       ts: latestPoint.ts,
       trendValues: windowResult.points.map(point => parseFloat(point.value)),
+      ...(latestPoint.oficial_fx_source && { oficial_fx_source: latestPoint.oficial_fx_source }),
     };
   }
 
@@ -145,6 +147,7 @@ export class EvaluateAlertsUseCase {
     return {
       value: parseFloat(latestPoint.value),
       ts: latestPoint.ts,
+      ...(latestPoint.oficial_fx_source && { oficial_fx_source: latestPoint.oficial_fx_source }),
     };
   }
 
@@ -173,6 +176,7 @@ export class EvaluateAlertsUseCase {
     return {
       value: parseFloat(metricSummary.value),
       ts: metricSummary.ts,
+      ...(metricSummary.oficial_fx_source && { oficial_fx_source: metricSummary.oficial_fx_source }),
     };
   }
 
@@ -183,7 +187,7 @@ export class EvaluateAlertsUseCase {
       metricData.trendValues,
       {
         base_ts: metricData.ts,
-        oficial_fx_source: 'bcra',
+        ...(metricData.oficial_fx_source && { oficial_fx_source: metricData.oficial_fx_source }),
       }
     );
   }
