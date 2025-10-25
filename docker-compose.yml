@@ -2,10 +2,9 @@ services:
   alerts:
     build: .
     container_name: alerts-engine
-    ports:
-      - "3001:3001"
+    network_mode: host
     environment:
-      - METRICS_API_BASE=${METRICS_API_BASE:-http://host.docker.internal:3000}
+      - METRICS_API_BASE=${METRICS_API_BASE:-http://localhost:3000}
       - METRICS_API_KEY=${METRICS_API_KEY:-}
       - APP_TIMEZONE=${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
       - LOG_LEVEL=${LOG_LEVEL:-info}
@@ -14,7 +13,7 @@ services:
       - HTTP_RETRIES=${HTTP_RETRIES:-3}
       - HTTP_BACKOFF_BASE_MS=${HTTP_BACKOFF_BASE_MS:-250}
       - HTTP_BACKOFF_MAX_MS=${HTTP_BACKOFF_MAX_MS:-4000}
-      - ALERTS_DATABASE_URL=${ALERTS_DATABASE_URL:-}
+      - ALERTS_DATABASE_URL=${ALERTS_DATABASE_URL:-postgres://alerts_user:alerts_password@localhost:5435/alerts_engine}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:3001/health"]
       interval: 20s

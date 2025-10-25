@@ -113,7 +113,7 @@ export class EvaluateAlertsUseCase {
           });
           return null;
         }
-        metricValue = latestPoint.value;
+        metricValue = parseFloat(latestPoint.value);
         metricTs = latestPoint.ts;
       } else {
         const latestResult = await this.fetchLatestMetricsUseCase.execute([
@@ -141,7 +141,7 @@ export class EvaluateAlertsUseCase {
           return null;
         }
 
-        metricValue = metricSummary.value;
+        metricValue = parseFloat(metricSummary.value);
         metricTs = metricSummary.ts;
       }
 

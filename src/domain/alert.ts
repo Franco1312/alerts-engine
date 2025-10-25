@@ -22,7 +22,7 @@ export interface Rule {
 
 export interface MetricPoint {
   ts: string;
-  value: number;
+  value: string;
 }
 
 export interface MetricPointsResponse {
@@ -34,7 +34,7 @@ export interface MetricPointsResponse {
 export interface MetricSummary {
   metric_id: string;
   ts: string;
-  value: number;
+  value: string;
 }
 
 export interface LatestMetricsResponse {

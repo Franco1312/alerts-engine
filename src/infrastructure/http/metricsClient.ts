@@ -133,7 +133,7 @@ export class MetricsClient {
         msg: 'Latest metrics fetched successfully',
         data: {
           count: response.data.items.length,
-          missing: response.data.missing.length,
+          missing: response.data.missing || [],
           duration,
         },
       });

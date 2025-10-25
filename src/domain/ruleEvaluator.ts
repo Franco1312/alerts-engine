@@ -29,7 +29,11 @@ export class RuleEvaluator {
       throw new Error(`Invalid condition format: ${condition}`);
     }
 
-    const thresholdStr = trimmedCondition.replace(operator, '').trim();
+    // Remove "value" prefix if present
+    let thresholdStr = trimmedCondition.replace(operator, '').trim();
+    if (thresholdStr.startsWith('value')) {
+      thresholdStr = thresholdStr.replace(/^value\s+/, '').trim();
+    }
     const threshold = parseFloat(thresholdStr);
 
     if (isNaN(threshold)) {
@@ -47,7 +51,12 @@ export class RuleEvaluator {
   }
 
   private static findOperator(condition: string): string | null {
-    for (const op of this.ALLOWED_OPERATORS) {
+    // Sort operators by length (longest first) to avoid partial matches
+    const sortedOps = [...this.ALLOWED_OPERATORS].sort(
+      (a, b) => b.length - a.length
+    );
+
+    for (const op of sortedOps) {
       if (condition.includes(op)) {
         return op;
       }
