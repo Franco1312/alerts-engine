@@ -1,34 +1,58 @@
-import {
-  FetchLatestMetricsUseCase,
-  defaultFetchLatestMetricsUseCase,
-} from './fetch-latest-metrics.use-case.js';
-import {
-  FetchMetricWindowUseCase,
-  defaultFetchMetricWindowUseCase,
-} from './fetch-metric-window.use-case.js';
+import { FetchLatestMetricsUseCase, defaultFetchLatestMetricsUseCase } from './fetch-latest-metrics.use-case.js';
+import { FetchMetricWindowUseCase, defaultFetchMetricWindowUseCase } from './fetch-metric-window.use-case.js';
+import { AlertsRepository, defaultAlertsRepository } from '@/infrastructure/db/alertsRepo.js';
 import { RuleEvaluator } from '@/domain/ruleEvaluator.js';
 import { logger } from '@/infrastructure/log/logger.js';
 import { RULES, EVALUATE } from '@/infrastructure/log/log-events.js';
 import { Alert, Rule } from '@/domain/alert.js';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+
+interface MetricData {
+  value: number;
+  ts: string;
+  trendValues?: number[];
+}
 
 export class EvaluateAlertsUseCase {
   private rules: Rule[] = [];
 
   constructor(
     private readonly fetchLatestMetricsUseCase: FetchLatestMetricsUseCase = defaultFetchLatestMetricsUseCase,
-    private readonly fetchMetricWindowUseCase: FetchMetricWindowUseCase = defaultFetchMetricWindowUseCase
+    private readonly fetchMetricWindowUseCase: FetchMetricWindowUseCase = defaultFetchMetricWindowUseCase,
+    private readonly alertsRepository: AlertsRepository = defaultAlertsRepository
   ) {
     this.loadRules();
   }
 
-  private loadRules(): void {
-    try {
-      const rulesPath = join(process.cwd(), 'rules', 'rules.json');
-      const rulesData = readFileSync(rulesPath, 'utf-8');
-      this.rules = JSON.parse(rulesData) as Rule[];
+  async execute(): Promise<Alert[]> {
+    const startTime = Date.now();
+    const alerts: Alert[] = [];
 
+    await this.loadRules();
+
+    logger.info({
+      event: EVALUATE.START,
+      msg: 'Starting alert evaluation',
+      data: { rulesCount: this.rules.length },
+    });
+
+    for (const rule of this.rules) {
+      try {
+        const alert = await this.evaluateRule(rule);
+        if (alert) {
+          alerts.push(alert);
+        }
+      } catch (error) {
+        this.logRuleError(rule, error);
+      }
+    }
+
+    this.logEvaluationComplete(startTime, alerts.length);
+    return alerts;
+  }
+
+  private async loadRules(): Promise<void> {
+    try {
+      this.rules = await this.alertsRepository.getRules();
       logger.info({
         event: RULES.LOAD,
         msg: 'Rules loaded successfully',
@@ -44,175 +68,196 @@ export class EvaluateAlertsUseCase {
     }
   }
 
-  async execute(): Promise<Alert[]> {
+  private async evaluateRule(rule: Rule): Promise<Alert | null> {
     const startTime = Date.now();
-    const alerts: Alert[] = [];
 
-    logger.info({
-      event: EVALUATE.START,
-      msg: 'Starting alert evaluation',
-      data: { rulesCount: this.rules.length },
-    });
-
-    for (const rule of this.rules) {
-      try {
-        const alert = await this.evaluateRule(rule);
-        if (alert) {
-          alerts.push(alert);
-        }
-      } catch (error) {
-        logger.warn({
-          event: EVALUATE.RULE_ERROR,
-          msg: 'Rule evaluation failed, skipping',
-          err: error instanceof Error ? error.message : String(error),
-          data: { ruleId: rule.alertId, metricId: rule.metricId },
-        });
+    try {
+      const metricData = await this.fetchMetricData(rule);
+      if (!metricData) {
+        return null;
       }
+
+      const evaluation = this.evaluateRuleCondition(rule, metricData);
+      this.logRuleDecision(rule, metricData, evaluation, startTime);
+
+      if (evaluation.triggered) {
+        return this.createAlert(rule, metricData, evaluation);
+      }
+
+      return null;
+    } catch (error) {
+      this.logRuleEvaluationError(rule, error, startTime);
+      throw error;
+    }
+  }
+
+  private async fetchMetricData(rule: Rule): Promise<MetricData | null> {
+    if (rule.type === 'threshold_with_trend' && rule.trend) {
+      return this.fetchTrendData(rule);
     }
 
+    if (rule.window) {
+      return this.fetchWindowData(rule);
+    }
+
+    return this.fetchLatestData(rule);
+  }
+
+  private async fetchTrendData(rule: Rule): Promise<MetricData | null> {
+    const windowResult = await this.fetchMetricWindowUseCase.execute({
+      metricId: rule.metricId,
+    });
+
+    if (windowResult.points.length === 0) {
+      this.logNoDataWarning(rule, 'trend rule');
+      return null;
+    }
+
+    const latestPoint = windowResult.points[windowResult.points.length - 1];
+    if (!latestPoint) {
+      this.logNoDataWarning(rule, 'trend rule');
+      return null;
+    }
+
+    return {
+      value: parseFloat(latestPoint.value),
+      ts: latestPoint.ts,
+      trendValues: windowResult.points.map(point => parseFloat(point.value)),
+    };
+  }
+
+  private async fetchWindowData(rule: Rule): Promise<MetricData | null> {
+    const windowResult = await this.fetchMetricWindowUseCase.execute({
+      metricId: rule.metricId,
+    });
+
+    if (windowResult.points.length === 0) {
+      this.logNoDataWarning(rule, 'rule');
+      return null;
+    }
+
+    const latestPoint = windowResult.points[windowResult.points.length - 1];
+    if (!latestPoint) {
+      this.logNoDataWarning(rule, 'rule');
+      return null;
+    }
+
+    return {
+      value: parseFloat(latestPoint.value),
+      ts: latestPoint.ts,
+    };
+  }
+
+  private async fetchLatestData(rule: Rule): Promise<MetricData | null> {
+    const latestResult = await this.fetchLatestMetricsUseCase.execute([rule.metricId]);
+
+    if (latestResult.missing.includes(rule.metricId)) {
+      logger.warn({
+        event: EVALUATE.MISSING_METRIC,
+        msg: 'Metric not found in latest data',
+        data: { ruleId: rule.alertId, metricId: rule.metricId },
+      });
+      return null;
+    }
+
+    const metricSummary = latestResult.items.find(item => item.metric_id === rule.metricId);
+    if (!metricSummary) {
+      logger.warn({
+        event: EVALUATE.NO_METRIC_DATA,
+        msg: 'Metric data not found',
+        data: { ruleId: rule.alertId, metricId: rule.metricId },
+      });
+      return null;
+    }
+
+    return {
+      value: parseFloat(metricSummary.value),
+      ts: metricSummary.ts,
+    };
+  }
+
+  private evaluateRuleCondition(rule: Rule, metricData: MetricData) {
+    return RuleEvaluator.evaluate(
+      rule,
+      metricData.value,
+      metricData.trendValues,
+      {
+        base_ts: metricData.ts,
+        oficial_fx_source: 'bcra',
+      }
+    );
+  }
+
+  private createAlert(rule: Rule, metricData: MetricData, evaluation: any): Alert {
+    return {
+      alertId: rule.alertId,
+      ts: metricData.ts,
+      level: evaluation.level,
+      message: rule.message,
+      payload: evaluation.payload || {},
+    };
+  }
+
+  private logNoDataWarning(rule: Rule, context: string): void {
+    logger.warn({
+      event: EVALUATE.NO_DATA,
+      msg: `No data points found for ${context}`,
+      data: { ruleId: rule.alertId, metricId: rule.metricId },
+    });
+  }
+
+  private logRuleDecision(rule: Rule, metricData: MetricData, evaluation: any, startTime: number): void {
+    const duration = Date.now() - startTime;
+    logger.info({
+      event: EVALUATE.RULE_DECISION,
+      msg: 'Rule evaluation completed',
+      data: {
+        ruleId: rule.alertId,
+        metricId: rule.metricId,
+        value: metricData.value,
+        condition: rule.condition,
+        triggered: evaluation.triggered,
+        level: evaluation.level,
+        reason: evaluation.reason,
+        duration,
+      },
+    });
+  }
+
+  private logRuleError(rule: Rule, error: unknown): void {
+    logger.warn({
+      event: EVALUATE.RULE_ERROR,
+      msg: 'Rule evaluation failed, skipping',
+      err: error instanceof Error ? error.message : String(error),
+      data: { ruleId: rule.alertId, metricId: rule.metricId },
+    });
+  }
+
+  private logRuleEvaluationError(rule: Rule, error: unknown, startTime: number): void {
+    const duration = Date.now() - startTime;
+    logger.error({
+      event: EVALUATE.RULE_ERROR,
+      msg: 'Rule evaluation failed',
+      err: error instanceof Error ? error.message : String(error),
+      data: {
+        ruleId: rule.alertId,
+        metricId: rule.metricId,
+        duration,
+      },
+    });
+  }
+
+  private logEvaluationComplete(startTime: number, alertsGenerated: number): void {
     const duration = Date.now() - startTime;
     logger.info({
       event: EVALUATE.COMPLETE,
       msg: 'Alert evaluation completed',
       data: {
-        alertsGenerated: alerts.length,
+        alertsGenerated,
         rulesEvaluated: this.rules.length,
         duration,
       },
     });
-
-    return alerts;
-  }
-
-  private async evaluateRule(rule: Rule): Promise<Alert | null> {
-    const startTime = Date.now();
-
-    try {
-      let metricValue: number;
-      let metricTs: string;
-
-      if (rule.window) {
-        const params: { metricId: string; from?: string; to?: string } = {
-          metricId: rule.metricId,
-        };
-        if (rule.window.from) params.from = rule.window.from;
-        if (rule.window.to) params.to = rule.window.to;
-
-        const windowResult =
-          await this.fetchMetricWindowUseCase.execute(params);
-
-        if (windowResult.points.length === 0) {
-          logger.warn({
-            event: EVALUATE.NO_DATA,
-            msg: 'No data points found for rule',
-            data: { ruleId: rule.alertId, metricId: rule.metricId },
-          });
-          return null;
-        }
-
-        const latestPoint = windowResult.points[windowResult.points.length - 1];
-        if (!latestPoint) {
-          logger.warn({
-            event: EVALUATE.NO_DATA,
-            msg: 'No data points found for rule',
-            data: { ruleId: rule.alertId, metricId: rule.metricId },
-          });
-          return null;
-        }
-        metricValue = parseFloat(latestPoint.value);
-        metricTs = latestPoint.ts;
-      } else {
-        const latestResult = await this.fetchLatestMetricsUseCase.execute([
-          rule.metricId,
-        ]);
-
-        if (latestResult.missing.includes(rule.metricId)) {
-          logger.warn({
-            event: EVALUATE.MISSING_METRIC,
-            msg: 'Metric not found in latest data',
-            data: { ruleId: rule.alertId, metricId: rule.metricId },
-          });
-          return null;
-        }
-
-        const metricSummary = latestResult.items.find(
-          item => item.metric_id === rule.metricId
-        );
-        if (!metricSummary) {
-          logger.warn({
-            event: EVALUATE.NO_METRIC_DATA,
-            msg: 'Metric data not found',
-            data: { ruleId: rule.alertId, metricId: rule.metricId },
-          });
-          return null;
-        }
-
-        metricValue = parseFloat(metricSummary.value);
-        metricTs = metricSummary.ts;
-      }
-
-      const evaluation = RuleEvaluator.evaluate(
-        rule.condition,
-        metricValue,
-        {
-          alertId: rule.alertId,
-          level: rule.level,
-          threshold: rule.threshold || 0,
-          units: rule.units || 'ratio',
-          ...(rule.inputs && { inputs: rule.inputs }),
-          ...(rule.notes && { notes: rule.notes }),
-          ...(rule.window?.from && {
-            window: `${rule.window.from} to ${rule.window.to}`,
-          }),
-        },
-        {
-          base_ts: metricTs,
-          oficial_fx_source: 'bcra', // TODO: Get from metric metadata
-        }
-      );
-      const duration = Date.now() - startTime;
-
-      logger.info({
-        event: EVALUATE.RULE_DECISION,
-        msg: 'Rule evaluation completed',
-        data: {
-          ruleId: rule.alertId,
-          metricId: rule.metricId,
-          value: metricValue,
-          condition: rule.condition,
-          triggered: evaluation.triggered,
-          level: evaluation.level,
-          duration,
-        },
-      });
-
-      if (evaluation.triggered) {
-        return {
-          alertId: rule.alertId,
-          ts: metricTs,
-          level: evaluation.level,
-          message: rule.message,
-          payload: evaluation.payload || {},
-        };
-      }
-
-      return null;
-    } catch (error) {
-      const duration = Date.now() - startTime;
-
-      logger.error({
-        event: EVALUATE.RULE_ERROR,
-        msg: 'Rule evaluation failed',
-        err: error instanceof Error ? error.message : String(error),
-        data: {
-          ruleId: rule.alertId,
-          metricId: rule.metricId,
-          duration,
-        },
-      });
-
-      throw error;
-    }
   }
 }
 

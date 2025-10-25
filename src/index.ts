@@ -20,7 +20,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/health', healthRoutes);
 app.use('/api/v1/alerts', alertsRoutes);
 
-app.use((err: Error, req: express.Request, res: express.Response) => {
+app.use((err: Error, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   logger.error({
     event: 'SERVER.ERROR',
     msg: 'Unhandled server error',

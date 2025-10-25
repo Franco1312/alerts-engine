@@ -1,4 +1,4 @@
-import { AlertLevel, EnrichedAlertPayload } from './alert.js';
+import { AlertLevel, EnrichedAlertPayload, Rule, TrendConfig } from './alert.js';
 
 export interface EvaluationResult {
   triggered: boolean;
@@ -6,6 +6,13 @@ export interface EvaluationResult {
   threshold: string;
   level: AlertLevel;
   payload?: EnrichedAlertPayload;
+  reason?: string;
+}
+
+export interface TrendEvaluationResult {
+  triggered: boolean;
+  reason: string;
+  trendValues: number[];
 }
 
 export class RuleEvaluator {
@@ -19,17 +26,9 @@ export class RuleEvaluator {
   ] as const;
 
   static evaluate(
-    condition: string,
+    rule: Rule,
     value: number,
-    rule: {
-      alertId: string;
-      level: AlertLevel;
-      threshold?: number;
-      units?: string;
-      inputs?: string[];
-      notes?: string;
-      window?: string;
-    },
+    trendValues?: number[],
     metadata?: {
       base_ts?: string;
       oficial_fx_source?: string;
@@ -39,25 +38,32 @@ export class RuleEvaluator {
       throw new Error(`Invalid value for evaluation: ${value}`);
     }
 
-    const trimmedCondition = condition.trim();
-
-    // Handle complex conditions with AND
-    if (trimmedCondition.includes(' AND ')) {
-      return this.evaluateComplexCondition(
-        trimmedCondition,
-        value,
-        rule,
-        metadata
-      );
+    switch (rule.type) {
+      case 'threshold':
+        return this.evaluateThreshold(rule, value, metadata);
+      case 'band':
+        return this.evaluateBand(rule, value, metadata);
+      case 'threshold_with_trend':
+        return this.evaluateThresholdWithTrend(rule, value, trendValues || [], metadata);
+      default:
+        throw new Error(`Unsupported rule type: ${rule.type}`);
     }
+  }
 
-    const operator = this.findOperator(trimmedCondition);
-
+  private static evaluateThreshold(
+    rule: Rule,
+    value: number,
+    metadata?: {
+      base_ts?: string;
+      oficial_fx_source?: string;
+    }
+  ): EvaluationResult {
+    const operator = this.findOperator(rule.condition);
     if (!operator) {
-      throw new Error(`Invalid condition format: ${condition}`);
+      throw new Error(`Invalid condition format: ${rule.condition}`);
     }
 
-    let thresholdStr = trimmedCondition.replace(operator, '').trim();
+    let thresholdStr = rule.condition.replace(operator, '').trim();
     if (thresholdStr.startsWith('value')) {
       thresholdStr = thresholdStr.replace(/^value\s+/, '').trim();
     }
@@ -68,7 +74,6 @@ export class RuleEvaluator {
     }
 
     const triggered = this.compareValues(value, operator, threshold);
-
     const payload = this.buildEnrichedPayload(value, rule, metadata);
 
     return {
@@ -80,68 +85,157 @@ export class RuleEvaluator {
     };
   }
 
-  private static evaluateComplexCondition(
-    condition: string,
+  private static evaluateBand(
+    rule: Rule,
     value: number,
-    rule: any,
-    metadata?: any
+    metadata?: {
+      base_ts?: string;
+      oficial_fx_source?: string;
+    }
   ): EvaluationResult {
+    // For band evaluation, we need to parse the condition to extract bounds
+    const condition = rule.condition;
+    
+    // Parse "0.002 < value AND value <= 0.01" format
     const parts = condition.split(' AND ');
     if (parts.length !== 2) {
-      throw new Error(`Invalid complex condition format: ${condition}`);
+      throw new Error(`Invalid band condition format: ${condition}`);
     }
 
-    const leftResult = this.evaluateSimpleCondition(
-      parts[0]?.trim() || '',
-      value
-    );
-    const rightResult = this.evaluateSimpleCondition(
-      parts[1]?.trim() || '',
-      value
-    );
+    const lowerPart = parts[0]?.trim() || '';
+    const upperPart = parts[1]?.trim() || '';
 
-    const triggered = leftResult.triggered && rightResult.triggered;
+    const lowerMatch = lowerPart.match(/(\d+\.?\d*)\s*<\s*value/);
+    const upperMatch = upperPart.match(/value\s*<=\s*(\d+\.?\d*)/);
 
+    if (!lowerMatch || !upperMatch) {
+      throw new Error(`Invalid band condition format: ${condition}`);
+    }
+
+    const lowerBound = parseFloat(lowerMatch[1]!);
+    const upperBound = parseFloat(upperMatch[1]!);
+
+    const triggered = value > lowerBound && value <= upperBound;
     const payload = this.buildEnrichedPayload(value, rule, metadata);
 
     return {
       triggered,
       value,
-      threshold: condition,
+      threshold: `(${lowerBound}, ${upperBound}]`,
       level: rule.level,
       payload,
     };
   }
 
-  private static evaluateSimpleCondition(
-    condition: string,
-    value: number
-  ): { triggered: boolean } {
-    const operator = this.findOperator(condition);
-    if (!operator) {
-      throw new Error(`Invalid simple condition format: ${condition}`);
+  private static evaluateThresholdWithTrend(
+    rule: Rule,
+    value: number,
+    trendValues: number[],
+    metadata?: {
+      base_ts?: string;
+      oficial_fx_source?: string;
+    }
+  ): EvaluationResult {
+    // First check the threshold condition
+    const thresholdResult = this.evaluateThreshold(rule, value, metadata);
+    
+    if (!thresholdResult.triggered) {
+      return {
+        ...thresholdResult,
+        reason: 'threshold_not_met',
+      };
     }
 
-    let thresholdStr = condition.replace(operator, '').trim();
-    if (thresholdStr.startsWith('value')) {
-      thresholdStr = thresholdStr.replace(/^value\s+/, '').trim();
+    // Then check the trend
+    const trendResult = this.evaluateTrend(rule.trend!, trendValues);
+    
+    if (!trendResult.triggered) {
+      return {
+        ...thresholdResult,
+        triggered: false,
+        reason: trendResult.reason,
+      };
     }
-    const threshold = parseFloat(thresholdStr);
 
-    if (isNaN(threshold)) {
-      throw new Error(`Invalid threshold value: ${thresholdStr}`);
+    return {
+      ...thresholdResult,
+      triggered: true,
+      reason: 'threshold_and_trend_met',
+    };
+  }
+
+  private static evaluateTrend(
+    trendConfig: TrendConfig,
+    values: number[]
+  ): TrendEvaluationResult {
+    const { windowPoints, rule } = trendConfig;
+
+    if (values.length < windowPoints) {
+      return {
+        triggered: false,
+        reason: 'insufficient_points',
+        trendValues: values,
+      };
     }
 
-    const triggered = this.compareValues(value, operator, threshold);
+    const recentValues = values.slice(-windowPoints);
 
-    return { triggered };
+    switch (rule) {
+      case 'non_decreasing':
+        return this.evaluateNonDecreasing(recentValues);
+      case 'at_least_4_of_5_increasing':
+        return this.evaluateAtLeast4Of5Increasing(recentValues);
+      default:
+        return {
+          triggered: false,
+          reason: 'unsupported_trend_rule',
+          trendValues: recentValues,
+        };
+    }
+  }
+
+  private static evaluateNonDecreasing(values: number[]): TrendEvaluationResult {
+    for (let i = 1; i < values.length; i++) {
+      const current = values[i];
+      const previous = values[i - 1];
+      if (current !== undefined && previous !== undefined && current < previous) {
+        return {
+          triggered: false,
+          reason: 'trend_not_non_decreasing',
+          trendValues: values,
+        };
+      }
+    }
+
+    return {
+      triggered: true,
+      reason: 'trend_non_decreasing',
+      trendValues: values,
+    };
+  }
+
+  private static evaluateAtLeast4Of5Increasing(values: number[]): TrendEvaluationResult {
+    let increasingCount = 0;
+    
+    for (let i = 1; i < values.length; i++) {
+      const current = values[i];
+      const previous = values[i - 1];
+      if (current !== undefined && previous !== undefined && current > previous) {
+        increasingCount++;
+      }
+    }
+
+    const triggered = increasingCount >= 4;
+    
+    return {
+      triggered,
+      reason: triggered ? 'trend_at_least_4_increasing' : 'trend_insufficient_increases',
+      trendValues: values,
+    };
   }
 
   private static findOperator(condition: string): string | null {
-    // Sort operators by length (longest first) to avoid partial matches
-    const sortedOps = [...this.ALLOWED_OPERATORS].sort(
-      (a, b) => b.length - a.length
-    );
+    const sortedOps = [...this.ALLOWED_OPERATORS].sort((a, b) => b.length - a.length);
 
     for (const op of sortedOps) {
       if (condition.includes(op)) {
@@ -176,13 +270,7 @@ export class RuleEvaluator {
 
   private static buildEnrichedPayload(
     value: number,
-    rule: {
-      threshold?: number;
-      units?: string;
-      inputs?: string[];
-      notes?: string;
-      window?: string;
-    },
+    rule: Rule,
     metadata?: {
       base_ts?: string;
       oficial_fx_source?: string;

@@ -3,6 +3,7 @@
     "alertId": "ratio.low_reserves_backing",
     "metricId": "ratio.reserves_to_base",
     "level": "red",
+    "type": "threshold",
     "condition": "value <= 0.002",
     "message": "El respaldo del peso en dólares está en un nivel crítico.",
     "threshold": 0.002,
@@ -14,6 +15,7 @@
     "alertId": "ratio.low_reserves_backing.amber",
     "metricId": "ratio.reserves_to_base",
     "level": "amber",
+    "type": "band",
     "condition": "0.002 < value AND value <= 0.01",
     "message": "El respaldo del peso es bajo; riesgo elevándose.",
     "threshold": 0.01,
@@ -25,6 +27,7 @@
     "alertId": "reserves.fast_outflow",
     "metricId": "delta.reserves_7d",
     "level": "amber",
+    "type": "threshold",
     "condition": "value <= -0.05",
     "message": "Las reservas cayeron significativamente en 7 días.",
     "threshold": -0.05,
@@ -37,6 +40,7 @@
     "alertId": "base.expansion_high",
     "metricId": "delta.base_30d",
     "level": "amber",
+    "type": "threshold",
     "condition": "value >= 0.08",
     "message": "La base monetaria creció fuertemente en los últimos 30 días.",
     "threshold": 0.08,
@@ -44,5 +48,36 @@
     "units": "ratio",
     "inputs": ["series:15"],
     "minConsecutive": 1
+  },
+  {
+    "alertId": "fx.brecha_mep.high",
+    "metricId": "fx.brecha_mep",
+    "level": "amber",
+    "type": "threshold_with_trend",
+    "condition": "value >= 0.60",
+    "message": "La brecha MEP se está ampliando rápidamente.",
+    "threshold": 0.60,
+    "units": "ratio",
+    "inputs": ["fx:mep", "fx:oficial"],
+    "window": "trend5",
+    "trend": {
+      "windowPoints": 5,
+      "rule": "non_decreasing"
+    },
+    "notes": "Monitorea tendencia de ampliación de brecha MEP en 5 puntos consecutivos."
+  },
+  {
+    "alertId": "reserves.fast_outflow.5d",
+    "metricId": "delta.reserves_5d",
+    "level": "red",
+    "type": "threshold",
+    "condition": "value <= -0.03",
+    "message": "Salida fuerte de reservas en los últimos 5 días.",
+    "threshold": -0.03,
+    "units": "ratio",
+    "inputs": ["series:1"],
+    "window": "5d",
+    "minConsecutive": 1,
+    "notes": "Alerta crítica por salida acelerada de reservas en 5 días."
   }
 ]

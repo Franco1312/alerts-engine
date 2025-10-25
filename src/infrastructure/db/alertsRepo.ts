@@ -2,7 +2,7 @@ import { Pool } from 'pg';
 import { config, isDatabaseEnabled } from '@/infrastructure/config/env.js';
 import { logger } from '@/infrastructure/log/logger.js';
 import { DATABASE } from '@/infrastructure/log/log-events.js';
-import { Alert, EnrichedAlertPayload } from '@/domain/alert.js';
+import { Alert, EnrichedAlertPayload, Rule } from '@/domain/alert.js';
 
 export interface UpsertResult {
   inserted: number;
@@ -281,16 +281,13 @@ export class AlertsRepository {
         },
       });
 
-      return result.rows.map(
-        row =>
-          ({
-            alertId: row.alert_id,
-            ts: row.ts,
-            level: row.level,
-            message: row.message,
-            payload: row.payload as EnrichedAlertPayload,
-          }) as Alert & { payload: EnrichedAlertPayload }
-      );
+      return result.rows.map(row => ({
+        alertId: row.alert_id,
+        ts: row.ts,
+        level: row.level,
+        message: row.message,
+        payload: row.payload as EnrichedAlertPayload,
+      } as Alert & { payload: EnrichedAlertPayload }));
     } catch (error) {
       const duration = Date.now() - startTime;
       logger.error({
@@ -303,7 +300,7 @@ export class AlertsRepository {
     }
   }
 
-  async getRules(): Promise<any[]> {
+  async getRules(): Promise<Rule[]> {
     if (!this.pool) {
       return [];
     }
@@ -313,7 +310,7 @@ export class AlertsRepository {
     try {
       const query = `
         SELECT alert_id, metric_id, level, condition, message, threshold, 
-               units, inputs, notes, min_consecutive
+               units, inputs, notes, min_consecutive, type, "window", trend
         FROM alert_rules
         ORDER BY level DESC, alert_id
       `;
@@ -330,7 +327,21 @@ export class AlertsRepository {
         },
       });
 
-      return result.rows;
+      return result.rows.map(row => ({
+        alertId: row.alert_id,
+        metricId: row.metric_id,
+        level: row.level,
+        type: row.type || 'threshold',
+        condition: row.condition,
+        message: row.message,
+        threshold: row.threshold,
+        window: row.window,
+        units: row.units,
+        inputs: row.inputs,
+        notes: row.notes,
+        minConsecutive: row.min_consecutive,
+        trend: row.trend,
+      } as Rule));
     } catch (error) {
       const duration = Date.now() - startTime;
       logger.error({
@@ -343,9 +354,7 @@ export class AlertsRepository {
     }
   }
 
-  async upsertAlertWithDedup(
-    alert: Alert & { payload?: EnrichedAlertPayload }
-  ): Promise<UpsertResult> {
+  async upsertAlertWithDedup(alert: Alert & { payload?: EnrichedAlertPayload }): Promise<UpsertResult> {
     if (!this.pool) {
       logger.warn({
         event: DATABASE.UPSERT,

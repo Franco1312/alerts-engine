@@ -8,21 +8,27 @@ export interface Alert {
   payload?: Record<string, unknown>;
 }
 
+export type RuleType = 'threshold' | 'band' | 'threshold_with_trend';
+
+export interface TrendConfig {
+  windowPoints: number;
+  rule: 'non_decreasing' | 'at_least_4_of_5_increasing';
+}
+
 export interface Rule {
   alertId: string;
   metricId: string;
   level: AlertLevel;
+  type: RuleType;
   condition: string;
   message: string;
   threshold?: number;
-  window?: {
-    from?: string;
-    to?: string;
-  };
+  window?: string;
   units?: string;
   inputs?: string[];
   notes?: string;
   minConsecutive?: number;
+  trend?: TrendConfig;
 }
 
 export interface EnrichedAlertPayload {
