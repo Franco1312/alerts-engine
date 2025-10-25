@@ -1,0 +1,23 @@
+[
+  {
+    "alertId": "ratio.low_reserves_backing",
+    "metricId": "ratio.reserves_to_base",
+    "level": "red",
+    "condition": "value <= 0.002",
+    "message": "Reserves-to-base ratio is critically low."
+  },
+  {
+    "alertId": "reserves.fast_outflow",
+    "metricId": "delta.reserves_7d",
+    "level": "amber",
+    "condition": "value <= -0.05",
+    "message": "7-day reserves decrease indicates strong outflow/intervention."
+  },
+  {
+    "alertId": "base.expansion_high",
+    "metricId": "delta.base_30d",
+    "level": "amber",
+    "condition": "value >= 0.08",
+    "message": "Monetary base expanded significantly over the last 30 days."
+  }
+]

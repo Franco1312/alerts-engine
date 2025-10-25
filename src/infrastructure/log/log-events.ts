@@ -1,0 +1,104 @@
+export const SERVER = {
+  INIT: 'SERVER.INIT',
+  FINISHED: 'SERVER.FINISHED',
+  ERROR: 'SERVER.ERROR',
+  SHUTDOWN: 'SERVER.SHUTDOWN',
+} as const;
+
+export const DATABASE = {
+  INIT: 'DATABASE.INIT',
+  QUERY: 'DATABASE.QUERY',
+  ERROR: 'DATABASE.ERROR',
+  CLOSE: 'DATABASE.CLOSE',
+  UPSERT: 'DATABASE.UPSERT',
+  GET_RECENT: 'DATABASE.GET_RECENT',
+} as const;
+
+export const API = {
+  INIT: 'API.INIT',
+  FINISHED: 'API.FINISHED',
+  ERROR: 'API.ERROR',
+} as const;
+
+export const CLI = {
+  INIT: 'CLI.INIT',
+  FINISHED: 'CLI.FINISHED',
+  ERROR: 'CLI.ERROR',
+  FATAL: 'CLI.FATAL',
+} as const;
+
+export const SCHEDULER = {
+  INIT: 'SCHEDULER.INIT',
+  RUN: 'SCHEDULER.RUN',
+  STOP: 'SCHEDULER.STOP',
+  ERROR: 'SCHEDULER.ERROR',
+} as const;
+
+export const METRICS = {
+  HEALTH_CHECK: 'METRICS.HEALTH_CHECK',
+  GET_POINTS: 'METRICS.GET_POINTS',
+  GET_LATEST: 'METRICS.GET_LATEST',
+  RETRY: 'METRICS.RETRY',
+  ERROR: 'METRICS.ERROR',
+} as const;
+
+export const ALERTS = {
+  INIT: 'ALERTS.INIT',
+  EVALUATE: 'ALERTS.EVALUATE',
+  GENERATED: 'ALERTS.GENERATED',
+  ERROR: 'ALERTS.ERROR',
+  GET_RECENT: 'ALERTS.GET_RECENT',
+} as const;
+
+export const RULES = {
+  LOAD: 'RULES.LOAD',
+  EVALUATE: 'RULES.EVALUATE',
+  ERROR: 'RULES.ERROR',
+} as const;
+
+export const HEALTH = {
+  CHECK: 'HEALTH.CHECK',
+  METRICS_API: 'HEALTH.METRICS_API',
+  ERROR: 'HEALTH.ERROR',
+} as const;
+
+export const DAILY_RUN = {
+  START: 'DAILY_RUN.START',
+  COMPLETE: 'DAILY_RUN.COMPLETE',
+  ERROR: 'DAILY_RUN.ERROR',
+  HEALTH_CHECK: 'DAILY_RUN.HEALTH_CHECK',
+  HEALTH_WARNING: 'DAILY_RUN.HEALTH_WARNING',
+  HEALTH_ERROR: 'DAILY_RUN.HEALTH_ERROR',
+  PERSIST: 'DAILY_RUN.PERSIST',
+  PERSIST_ERROR: 'DAILY_RUN.PERSIST_ERROR',
+} as const;
+
+export const FETCH = {
+  LATEST: 'FETCH.LATEST',
+  WINDOW: 'FETCH.WINDOW',
+  ERROR: 'FETCH.ERROR',
+} as const;
+
+export const EVALUATE = {
+  START: 'EVALUATE.START',
+  COMPLETE: 'EVALUATE.COMPLETE',
+  RULE_DECISION: 'EVALUATE.RULE_DECISION',
+  RULE_ERROR: 'EVALUATE.RULE_ERROR',
+  NO_DATA: 'EVALUATE.NO_DATA',
+  MISSING_METRIC: 'EVALUATE.MISSING_METRIC',
+  NO_METRIC_DATA: 'EVALUATE.NO_METRIC_DATA',
+} as const;
+
+export type LogEvent =
+  | (typeof SERVER)[keyof typeof SERVER]
+  | (typeof DATABASE)[keyof typeof DATABASE]
+  | (typeof API)[keyof typeof API]
+  | (typeof CLI)[keyof typeof CLI]
+  | (typeof SCHEDULER)[keyof typeof SCHEDULER]
+  | (typeof METRICS)[keyof typeof METRICS]
+  | (typeof ALERTS)[keyof typeof ALERTS]
+  | (typeof RULES)[keyof typeof RULES]
+  | (typeof HEALTH)[keyof typeof HEALTH]
+  | (typeof DAILY_RUN)[keyof typeof DAILY_RUN]
+  | (typeof FETCH)[keyof typeof FETCH]
+  | (typeof EVALUATE)[keyof typeof EVALUATE];

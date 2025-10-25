@@ -1,0 +1,68 @@
+services:
+  alerts:
+    build: .
+    container_name: alerts-engine
+    ports:
+      - "3001:3001"
+    environment:
+      - METRICS_API_BASE=${METRICS_API_BASE:-http://host.docker.internal:3000}
+      - METRICS_API_KEY=${METRICS_API_KEY:-}
+      - APP_TIMEZONE=${APP_TIMEZONE:-America/Argentina/Buenos_Aires}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - ENABLE_SCHEDULER=${ENABLE_SCHEDULER:-true}
+      - HTTP_TIMEOUT_MS=${HTTP_TIMEOUT_MS:-10000}
+      - HTTP_RETRIES=${HTTP_RETRIES:-3}
+      - HTTP_BACKOFF_BASE_MS=${HTTP_BACKOFF_BASE_MS:-250}
+      - HTTP_BACKOFF_MAX_MS=${HTTP_BACKOFF_MAX_MS:-4000}
+      - ALERTS_DATABASE_URL=${ALERTS_DATABASE_URL:-}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3001/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  alerts-db:
+    image: postgres:16-alpine
+    container_name: alerts-db
+    ports:
+      - "5435:5432"
+    environment:
+      - POSTGRES_DB=alerts_engine
+      - POSTGRES_USER=alerts_user
+      - POSTGRES_PASSWORD=alerts_password
+    volumes:
+      - alerts_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alerts_user -d alerts_engine"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    profiles:
+      - with-db
+
+  # Optional: metrics-engine service (commented out)
+  # Uncomment and use this if you want to run metrics-engine in the same compose
+  # Then change METRICS_API_BASE to http://metrics-engine:3000
+  # metrics-engine:
+  #   image: metrics-engine:latest
+  #   container_name: metrics-engine
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - NODE_ENV=production
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   restart: unless-stopped
+
+volumes:
+  alerts_db_data:
+
+networks:
+  default:
+    name: alerts-network
