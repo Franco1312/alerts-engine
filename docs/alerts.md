@@ -42,6 +42,25 @@ El sistema de alertas monitorea métricas económicas críticas y genera alertas
 - **Mensaje**: "La base monetaria creció fuertemente en los últimos 30 días."
 - **Significado**: Detecta expansión monetaria excesiva que puede generar inflación.
 
+### 5. Alerta ÁMBAR - Brecha MEP Elevada con Tendencia
+
+- **ID**: `fx.brecha_mep.high`
+- **Métrica**: `fx.brecha_mep`
+- **Nivel**: 🟡 **ÁMBAR** (advertencia)
+- **Condición**: `value >= 0.60` (≥ 60%) + tendencia no decreciente en 5 puntos
+- **Mensaje**: "La brecha MEP se está ampliando rápidamente."
+- **Significado**: Detecta ampliación acelerada de la brecha MEP con tendencia sostenida.
+- **Lógica de tendencia**: Requiere 5 puntos consecutivos no decrecientes (v[t-4] ≤ v[t-3] ≤ v[t-2] ≤ v[t-1] ≤ v[t])
+
+### 6. Alerta ROJA - Salida Fuerte de Reservas en 5 días
+
+- **ID**: `reserves.fast_outflow.5d`
+- **Métrica**: `delta.reserves_5d`
+- **Nivel**: 🔴 **ROJO** (crítico)
+- **Condición**: `value <= -0.03` (≤ -3% en 5 días)
+- **Mensaje**: "Salida fuerte de reservas en los últimos 5 días."
+- **Significado**: Alerta crítica por salida acelerada de reservas en ventana corta.
+
 ## Payload Enriquecido
 
 Cada alerta incluye un payload enriquecido con información detallada:
@@ -57,6 +76,22 @@ Cada alerta incluye un payload enriquecido con información detallada:
   "base_ts": "2025-01-15",
   "oficial_fx_source": "bcra",
   "notes": "Si depende de TC oficial, indicar si fue BCRA o fallback."
+}
+```
+
+### Ejemplo de Payload con Tendencia (fx.brecha_mep.high):
+
+```json
+{
+  "value": 0.65,
+  "value_pct": 65.0,
+  "threshold": 0.6,
+  "window": "trend5",
+  "units": "ratio",
+  "inputs": ["mep", "oficial"],
+  "base_ts": "2025-01-15",
+  "oficial_fx_source": "bcra",
+  "notes": "Monitorea tendencia de ampliación de brecha MEP en 5 puntos consecutivos."
 }
 ```
 
@@ -77,6 +112,8 @@ Cada alerta incluye un payload enriquecido con información detallada:
 - **Clave única**: `(alert_id, ts)` - Una alerta por regla por fecha
 - **Comportamiento**: Re-ejecutar el mismo día actualiza la alerta existente
 - **Idempotencia**: Múltiples ejecuciones no duplican alertas
+- **Estrategia**: `INSERT ... ON CONFLICT (alert_id, ts) DO UPDATE SET` para garantizar unicidad
+- **Campos actualizados**: `level`, `message`, `payload`, `updated_at` cuando hay conflicto
 
 ## Horarios de Ejecución
 
@@ -164,7 +201,30 @@ CREATE TABLE IF NOT EXISTS alerts_emitted (
   message TEXT NOT NULL,
   payload JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ,
   UNIQUE (alert_id, ts)
+);
+```
+
+### Tabla: alert_rules
+
+```sql
+CREATE TABLE IF NOT EXISTS alert_rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  alert_id TEXT NOT NULL UNIQUE,
+  metric_id TEXT NOT NULL,
+  level TEXT NOT NULL CHECK (level IN ('red', 'amber', 'green')),
+  type TEXT NOT NULL DEFAULT 'threshold',
+  condition TEXT NOT NULL,
+  message TEXT NOT NULL,
+  threshold NUMERIC,
+  window TEXT,
+  units TEXT,
+  inputs JSONB NOT NULL DEFAULT '[]'::jsonb,
+  notes TEXT,
+  min_consecutive INTEGER,
+  trend JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 

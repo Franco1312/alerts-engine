@@ -118,17 +118,23 @@ export class AlertsRepository {
       for (const alert of alerts) {
         const result = await client.query(
           `
-          INSERT INTO alerts.alerts (alert_id, ts, level, message, payload)
+          INSERT INTO alerts_emitted (alert_id, ts, level, message, payload)
           VALUES ($1, $2, $3, $4, $5)
           ON CONFLICT (alert_id, ts)
           DO UPDATE SET
             level = EXCLUDED.level,
             message = EXCLUDED.message,
             payload = EXCLUDED.payload,
-            created_at = NOW()
+            updated_at = NOW()
           RETURNING (xmax = 0) AS inserted
         `,
-          [alert.alertId, alert.ts, alert.level, alert.message, alert.payload]
+          [
+            alert.alertId,
+            alert.ts,
+            alert.level,
+            alert.message,
+            JSON.stringify(alert.payload || {}),
+          ]
         );
 
         if (result.rows[0].inserted) {
@@ -143,7 +149,7 @@ export class AlertsRepository {
       const duration = Date.now() - startTime;
       logger.info({
         event: DATABASE.UPSERT,
-        msg: 'Alerts upserted successfully',
+        msg: 'Alerts upserted successfully with deduplication',
         data: { inserted, updated, duration, total: alerts.length },
       });
 
@@ -281,13 +287,21 @@ export class AlertsRepository {
         },
       });
 
-      return result.rows.map(row => ({
-        alertId: row.alert_id,
-        ts: row.ts,
-        level: row.level,
-        message: row.message,
-        payload: row.payload as EnrichedAlertPayload,
-      } as Alert & { payload: EnrichedAlertPayload }));
+      return result.rows.map(row => {
+        const payload = row.payload as EnrichedAlertPayload;
+
+        if (payload.inputs && !Array.isArray(payload.inputs)) {
+          payload.inputs = [payload.inputs];
+        }
+
+        return {
+          alertId: row.alert_id,
+          ts: row.ts,
+          level: row.level,
+          message: row.message,
+          payload,
+        } as Alert & { payload: EnrichedAlertPayload };
+      });
     } catch (error) {
       const duration = Date.now() - startTime;
       logger.error({
@@ -327,21 +341,24 @@ export class AlertsRepository {
         },
       });
 
-      return result.rows.map(row => ({
-        alertId: row.alert_id,
-        metricId: row.metric_id,
-        level: row.level,
-        type: row.type || 'threshold',
-        condition: row.condition,
-        message: row.message,
-        threshold: row.threshold,
-        window: row.window,
-        units: row.units,
-        inputs: row.inputs,
-        notes: row.notes,
-        minConsecutive: row.min_consecutive,
-        trend: row.trend,
-      } as Rule));
+      return result.rows.map(
+        row =>
+          ({
+            alertId: row.alert_id,
+            metricId: row.metric_id,
+            level: row.level,
+            type: row.type || 'threshold',
+            condition: row.condition,
+            message: row.message,
+            threshold: row.threshold,
+            window: row.window,
+            units: row.units,
+            inputs: row.inputs,
+            notes: row.notes,
+            minConsecutive: row.min_consecutive,
+            trend: row.trend,
+          }) as Rule
+      );
     } catch (error) {
       const duration = Date.now() - startTime;
       logger.error({
@@ -354,7 +371,9 @@ export class AlertsRepository {
     }
   }
 
-  async upsertAlertWithDedup(alert: Alert & { payload?: EnrichedAlertPayload }): Promise<UpsertResult> {
+  async upsertAlertWithDedup(
+    alert: Alert & { payload?: EnrichedAlertPayload }
+  ): Promise<UpsertResult> {
     if (!this.pool) {
       logger.warn({
         event: DATABASE.UPSERT,

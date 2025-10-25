@@ -1,4 +1,9 @@
-import { AlertLevel, EnrichedAlertPayload, Rule, TrendConfig } from './alert.js';
+import {
+  AlertLevel,
+  EnrichedAlertPayload,
+  Rule,
+  TrendConfig,
+} from './alert.js';
 
 export interface EvaluationResult {
   triggered: boolean;
@@ -44,7 +49,12 @@ export class RuleEvaluator {
       case 'band':
         return this.evaluateBand(rule, value, metadata);
       case 'threshold_with_trend':
-        return this.evaluateThresholdWithTrend(rule, value, trendValues || [], metadata);
+        return this.evaluateThresholdWithTrend(
+          rule,
+          value,
+          trendValues || [],
+          metadata
+        );
       default:
         throw new Error(`Unsupported rule type: ${rule.type}`);
     }
@@ -95,7 +105,7 @@ export class RuleEvaluator {
   ): EvaluationResult {
     // For band evaluation, we need to parse the condition to extract bounds
     const condition = rule.condition;
-    
+
     // Parse "0.002 < value AND value <= 0.01" format
     const parts = condition.split(' AND ');
     if (parts.length !== 2) {
@@ -138,7 +148,7 @@ export class RuleEvaluator {
   ): EvaluationResult {
     // First check the threshold condition
     const thresholdResult = this.evaluateThreshold(rule, value, metadata);
-    
+
     if (!thresholdResult.triggered) {
       return {
         ...thresholdResult,
@@ -148,7 +158,7 @@ export class RuleEvaluator {
 
     // Then check the trend
     const trendResult = this.evaluateTrend(rule.trend!, trendValues);
-    
+
     if (!trendResult.triggered) {
       return {
         ...thresholdResult,
@@ -194,11 +204,17 @@ export class RuleEvaluator {
     }
   }
 
-  private static evaluateNonDecreasing(values: number[]): TrendEvaluationResult {
+  private static evaluateNonDecreasing(
+    values: number[]
+  ): TrendEvaluationResult {
     for (let i = 1; i < values.length; i++) {
       const current = values[i];
       const previous = values[i - 1];
-      if (current !== undefined && previous !== undefined && current < previous) {
+      if (
+        current !== undefined &&
+        previous !== undefined &&
+        current < previous
+      ) {
         return {
           triggered: false,
           reason: 'trend_not_non_decreasing',
@@ -214,28 +230,38 @@ export class RuleEvaluator {
     };
   }
 
-  private static evaluateAtLeast4Of5Increasing(values: number[]): TrendEvaluationResult {
+  private static evaluateAtLeast4Of5Increasing(
+    values: number[]
+  ): TrendEvaluationResult {
     let increasingCount = 0;
-    
+
     for (let i = 1; i < values.length; i++) {
       const current = values[i];
       const previous = values[i - 1];
-      if (current !== undefined && previous !== undefined && current > previous) {
+      if (
+        current !== undefined &&
+        previous !== undefined &&
+        current > previous
+      ) {
         increasingCount++;
       }
     }
 
     const triggered = increasingCount >= 4;
-    
+
     return {
       triggered,
-      reason: triggered ? 'trend_at_least_4_increasing' : 'trend_insufficient_increases',
+      reason: triggered
+        ? 'trend_at_least_4_increasing'
+        : 'trend_insufficient_increases',
       trendValues: values,
     };
   }
 
   private static findOperator(condition: string): string | null {
-    const sortedOps = [...this.ALLOWED_OPERATORS].sort((a, b) => b.length - a.length);
+    const sortedOps = [...this.ALLOWED_OPERATORS].sort(
+      (a, b) => b.length - a.length
+    );
 
     for (const op of sortedOps) {
       if (condition.includes(op)) {
@@ -288,7 +314,7 @@ export class RuleEvaluator {
     }
 
     if (rule.inputs) {
-      payload.inputs = rule.inputs;
+      payload.inputs = Array.isArray(rule.inputs) ? rule.inputs : [rule.inputs];
     }
 
     if (metadata?.base_ts) {

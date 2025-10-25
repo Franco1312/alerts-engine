@@ -56,9 +56,9 @@
     "type": "threshold_with_trend",
     "condition": "value >= 0.60",
     "message": "La brecha MEP se está ampliando rápidamente.",
-    "threshold": 0.60,
+    "threshold": 0.6,
     "units": "ratio",
-    "inputs": ["fx:mep", "fx:oficial"],
+    "inputs": ["mep", "oficial"],
     "window": "trend5",
     "trend": {
       "windowPoints": 5,

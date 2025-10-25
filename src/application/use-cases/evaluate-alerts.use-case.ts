@@ -1,6 +1,15 @@
-import { FetchLatestMetricsUseCase, defaultFetchLatestMetricsUseCase } from './fetch-latest-metrics.use-case.js';
-import { FetchMetricWindowUseCase, defaultFetchMetricWindowUseCase } from './fetch-metric-window.use-case.js';
-import { AlertsRepository, defaultAlertsRepository } from '@/infrastructure/db/alertsRepo.js';
+import {
+  FetchLatestMetricsUseCase,
+  defaultFetchLatestMetricsUseCase,
+} from './fetch-latest-metrics.use-case.js';
+import {
+  FetchMetricWindowUseCase,
+  defaultFetchMetricWindowUseCase,
+} from './fetch-metric-window.use-case.js';
+import {
+  AlertsRepository,
+  defaultAlertsRepository,
+} from '@/infrastructure/db/alertsRepo.js';
 import { RuleEvaluator } from '@/domain/ruleEvaluator.js';
 import { logger } from '@/infrastructure/log/logger.js';
 import { RULES, EVALUATE } from '@/infrastructure/log/log-events.js';
@@ -44,6 +53,28 @@ export class EvaluateAlertsUseCase {
         }
       } catch (error) {
         this.logRuleError(rule, error);
+      }
+    }
+
+    if (alerts.length > 0) {
+      try {
+        const result = await this.alertsRepository.upsertAlerts(alerts);
+        logger.info({
+          event: EVALUATE.STORED,
+          msg: 'Alerts stored with deduplication',
+          data: {
+            inserted: result.inserted,
+            updated: result.updated,
+            total: alerts.length,
+          },
+        });
+      } catch (error) {
+        logger.error({
+          event: EVALUATE.STORE_ERROR,
+          msg: 'Failed to store alerts',
+          err: error instanceof Error ? error.message : String(error),
+          data: { count: alerts.length },
+        });
       }
     }
 
@@ -124,7 +155,9 @@ export class EvaluateAlertsUseCase {
       value: parseFloat(latestPoint.value),
       ts: latestPoint.ts,
       trendValues: windowResult.points.map(point => parseFloat(point.value)),
-      ...(latestPoint.oficial_fx_source && { oficial_fx_source: latestPoint.oficial_fx_source }),
+      ...(latestPoint.oficial_fx_source && {
+        oficial_fx_source: latestPoint.oficial_fx_source,
+      }),
     };
   }
 
@@ -147,12 +180,16 @@ export class EvaluateAlertsUseCase {
     return {
       value: parseFloat(latestPoint.value),
       ts: latestPoint.ts,
-      ...(latestPoint.oficial_fx_source && { oficial_fx_source: latestPoint.oficial_fx_source }),
+      ...(latestPoint.oficial_fx_source && {
+        oficial_fx_source: latestPoint.oficial_fx_source,
+      }),
     };
   }
 
   private async fetchLatestData(rule: Rule): Promise<MetricData | null> {
-    const latestResult = await this.fetchLatestMetricsUseCase.execute([rule.metricId]);
+    const latestResult = await this.fetchLatestMetricsUseCase.execute([
+      rule.metricId,
+    ]);
 
     if (latestResult.missing.includes(rule.metricId)) {
       logger.warn({
@@ -163,7 +200,9 @@ export class EvaluateAlertsUseCase {
       return null;
     }
 
-    const metricSummary = latestResult.items.find(item => item.metric_id === rule.metricId);
+    const metricSummary = latestResult.items.find(
+      item => item.metric_id === rule.metricId
+    );
     if (!metricSummary) {
       logger.warn({
         event: EVALUATE.NO_METRIC_DATA,
@@ -176,7 +215,9 @@ export class EvaluateAlertsUseCase {
     return {
       value: parseFloat(metricSummary.value),
       ts: metricSummary.ts,
-      ...(metricSummary.oficial_fx_source && { oficial_fx_source: metricSummary.oficial_fx_source }),
+      ...(metricSummary.oficial_fx_source && {
+        oficial_fx_source: metricSummary.oficial_fx_source,
+      }),
     };
   }
 
@@ -187,12 +228,18 @@ export class EvaluateAlertsUseCase {
       metricData.trendValues,
       {
         base_ts: metricData.ts,
-        ...(metricData.oficial_fx_source && { oficial_fx_source: metricData.oficial_fx_source }),
+        ...(metricData.oficial_fx_source && {
+          oficial_fx_source: metricData.oficial_fx_source,
+        }),
       }
     );
   }
 
-  private createAlert(rule: Rule, metricData: MetricData, evaluation: any): Alert {
+  private createAlert(
+    rule: Rule,
+    metricData: MetricData,
+    evaluation: any
+  ): Alert {
     return {
       alertId: rule.alertId,
       ts: metricData.ts,
@@ -210,7 +257,12 @@ export class EvaluateAlertsUseCase {
     });
   }
 
-  private logRuleDecision(rule: Rule, metricData: MetricData, evaluation: any, startTime: number): void {
+  private logRuleDecision(
+    rule: Rule,
+    metricData: MetricData,
+    evaluation: any,
+    startTime: number
+  ): void {
     const duration = Date.now() - startTime;
     logger.info({
       event: EVALUATE.RULE_DECISION,
@@ -237,7 +289,11 @@ export class EvaluateAlertsUseCase {
     });
   }
 
-  private logRuleEvaluationError(rule: Rule, error: unknown, startTime: number): void {
+  private logRuleEvaluationError(
+    rule: Rule,
+    error: unknown,
+    startTime: number
+  ): void {
     const duration = Date.now() - startTime;
     logger.error({
       event: EVALUATE.RULE_ERROR,
@@ -251,7 +307,10 @@ export class EvaluateAlertsUseCase {
     });
   }
 
-  private logEvaluationComplete(startTime: number, alertsGenerated: number): void {
+  private logEvaluationComplete(
+    startTime: number,
+    alertsGenerated: number
+  ): void {
     const duration = Date.now() - startTime;
     logger.info({
       event: EVALUATE.COMPLETE,
