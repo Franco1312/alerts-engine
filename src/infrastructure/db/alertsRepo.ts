@@ -2,7 +2,7 @@ import { Pool } from 'pg';
 import { config, isDatabaseEnabled } from '@/infrastructure/config/env.js';
 import { logger } from '@/infrastructure/log/logger.js';
 import { DATABASE } from '@/infrastructure/log/log-events.js';
-import { Alert } from '@/domain/alert.js';
+import { Alert, EnrichedAlertPayload } from '@/domain/alert.js';
 
 export interface UpsertResult {
   inserted: number;
@@ -223,6 +223,186 @@ export class AlertsRepository {
         event: DATABASE.CLOSE,
         msg: 'Database connection pool closed',
       });
+    }
+  }
+
+  async getAlerts(
+    from?: string,
+    to?: string,
+    level?: string,
+    limit: number = 50
+  ): Promise<Array<Alert & { payload: EnrichedAlertPayload }>> {
+    if (!this.pool) {
+      return [];
+    }
+
+    const startTime = Date.now();
+
+    try {
+      let query = `
+        SELECT alert_id, ts, level, message, payload
+        FROM alerts_emitted
+        WHERE 1=1
+      `;
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      if (from) {
+        query += ` AND ts >= $${paramIndex}`;
+        params.push(from);
+        paramIndex++;
+      }
+
+      if (to) {
+        query += ` AND ts <= $${paramIndex}`;
+        params.push(to);
+        paramIndex++;
+      }
+
+      if (level) {
+        query += ` AND level = $${paramIndex}`;
+        params.push(level);
+        paramIndex++;
+      }
+
+      query += ` ORDER BY ts DESC, created_at DESC LIMIT $${paramIndex}`;
+      params.push(limit);
+
+      const result = await this.pool.query(query, params);
+
+      const duration = Date.now() - startTime;
+      logger.info({
+        event: DATABASE.QUERY,
+        msg: 'Alerts retrieved successfully',
+        data: {
+          count: result.rows.length,
+          duration,
+          filters: { from, to, level, limit },
+        },
+      });
+
+      return result.rows.map(
+        row =>
+          ({
+            alertId: row.alert_id,
+            ts: row.ts,
+            level: row.level,
+            message: row.message,
+            payload: row.payload as EnrichedAlertPayload,
+          }) as Alert & { payload: EnrichedAlertPayload }
+      );
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logger.error({
+        event: DATABASE.ERROR,
+        msg: 'Failed to retrieve alerts',
+        err: error instanceof Error ? error.message : String(error),
+        data: { from, to, level, limit, duration },
+      });
+      throw error;
+    }
+  }
+
+  async getRules(): Promise<any[]> {
+    if (!this.pool) {
+      return [];
+    }
+
+    const startTime = Date.now();
+
+    try {
+      const query = `
+        SELECT alert_id, metric_id, level, condition, message, threshold, 
+               units, inputs, notes, min_consecutive
+        FROM alert_rules
+        ORDER BY level DESC, alert_id
+      `;
+
+      const result = await this.pool.query(query);
+
+      const duration = Date.now() - startTime;
+      logger.info({
+        event: DATABASE.QUERY,
+        msg: 'Rules retrieved successfully',
+        data: {
+          count: result.rows.length,
+          duration,
+        },
+      });
+
+      return result.rows;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logger.error({
+        event: DATABASE.ERROR,
+        msg: 'Failed to retrieve rules',
+        err: error instanceof Error ? error.message : String(error),
+        data: { duration },
+      });
+      throw error;
+    }
+  }
+
+  async upsertAlertWithDedup(
+    alert: Alert & { payload?: EnrichedAlertPayload }
+  ): Promise<UpsertResult> {
+    if (!this.pool) {
+      logger.warn({
+        event: DATABASE.UPSERT,
+        msg: 'Database disabled, alert not persisted',
+        data: { alertId: alert.alertId },
+      });
+      return { inserted: 0, updated: 0 };
+    }
+
+    const startTime = Date.now();
+
+    try {
+      const query = `
+        INSERT INTO alerts_emitted (alert_id, ts, level, message, payload)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (alert_id, ts) 
+        DO UPDATE SET 
+          level = EXCLUDED.level,
+          message = EXCLUDED.message,
+          payload = EXCLUDED.payload,
+          created_at = now()
+        RETURNING (xmax = 0) AS inserted
+      `;
+
+      const result = await this.pool.query(query, [
+        alert.alertId,
+        alert.ts,
+        alert.level,
+        alert.message,
+        JSON.stringify(alert.payload || {}),
+      ]);
+
+      const inserted = result.rows[0]?.inserted ? 1 : 0;
+      const updated = inserted ? 0 : 1;
+
+      const duration = Date.now() - startTime;
+      logger.info({
+        event: DATABASE.UPSERT,
+        msg: 'Alert upserted with deduplication',
+        data: {
+          alertId: alert.alertId,
+          inserted,
+          updated,
+          duration,
+        },
+      });
+
+      return { inserted, updated };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      logger.error({
+        event: DATABASE.ERROR,
+        msg: 'Failed to upsert alert',
+        err: error instanceof Error ? error.message : String(error),
+        data: { alertId: alert.alertId, duration },
+      });
+      throw error;
     }
   }
 }

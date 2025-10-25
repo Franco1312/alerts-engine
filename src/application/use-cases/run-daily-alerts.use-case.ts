@@ -12,7 +12,7 @@ import {
 } from './evaluate-alerts.use-case.js';
 import { logger } from '@/infrastructure/log/logger.js';
 import { DAILY_RUN } from '@/infrastructure/log/log-events.js';
-import { Alert } from '@/domain/alert.js';
+import { Alert, EnrichedAlertPayload } from '@/domain/alert.js';
 
 export class RunDailyAlertsUseCase {
   private lastRunAlerts: Alert[] = [];
@@ -116,15 +116,24 @@ export class RunDailyAlertsUseCase {
     }
 
     try {
-      const result = await this.alertsRepository.upsertAlerts(alerts);
+      let totalInserted = 0;
+      let totalUpdated = 0;
+
+      for (const alert of alerts) {
+        const result = await this.alertsRepository.upsertAlertWithDedup(
+          alert as Alert & { payload?: EnrichedAlertPayload }
+        );
+        totalInserted += result.inserted;
+        totalUpdated += result.updated;
+      }
 
       logger.info({
         event: DAILY_RUN.PERSIST,
         msg: 'Alerts persisted successfully',
         data: {
           total: alerts.length,
-          inserted: result.inserted,
-          updated: result.updated,
+          inserted: totalInserted,
+          updated: totalUpdated,
         },
       });
     } catch (error) {

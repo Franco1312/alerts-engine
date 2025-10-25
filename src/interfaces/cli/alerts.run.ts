@@ -4,10 +4,16 @@ import { CLI } from '@/infrastructure/log/log-events.js';
 
 async function runAlerts(): Promise<void> {
   const startTime = Date.now();
+  const args = process.argv.slice(2);
+  const dateArg = args.find(arg => arg.startsWith('--date='));
+  const targetDate = dateArg
+    ? dateArg.split('=')[1]
+    : new Date().toISOString().split('T')[0];
 
   logger.info({
     event: CLI.INIT,
     msg: 'Starting alerts evaluation via CLI',
+    data: { targetDate },
   });
 
   try {

@@ -4,20 +4,45 @@
     "metricId": "ratio.reserves_to_base",
     "level": "red",
     "condition": "value <= 0.002",
-    "message": "Reserves-to-base ratio is critically low."
+    "message": "El respaldo del peso en dólares está en un nivel crítico.",
+    "threshold": 0.002,
+    "units": "ratio",
+    "inputs": ["series:1", "series:15", "fx:oficial"],
+    "notes": "Si depende de TC oficial, indicar si fue BCRA o fallback."
+  },
+  {
+    "alertId": "ratio.low_reserves_backing.amber",
+    "metricId": "ratio.reserves_to_base",
+    "level": "amber",
+    "condition": "0.002 < value AND value <= 0.01",
+    "message": "El respaldo del peso es bajo; riesgo elevándose.",
+    "threshold": 0.01,
+    "units": "ratio",
+    "inputs": ["series:1", "series:15", "fx:oficial"],
+    "notes": "Banda de advertencia para respaldo bajo."
   },
   {
     "alertId": "reserves.fast_outflow",
     "metricId": "delta.reserves_7d",
     "level": "amber",
     "condition": "value <= -0.05",
-    "message": "7-day reserves decrease indicates strong outflow/intervention."
+    "message": "Las reservas cayeron significativamente en 7 días.",
+    "threshold": -0.05,
+    "window": "7d",
+    "units": "ratio",
+    "inputs": ["series:1"],
+    "minConsecutive": 1
   },
   {
     "alertId": "base.expansion_high",
     "metricId": "delta.base_30d",
     "level": "amber",
     "condition": "value >= 0.08",
-    "message": "Monetary base expanded significantly over the last 30 days."
+    "message": "La base monetaria creció fuertemente en los últimos 30 días.",
+    "threshold": 0.08,
+    "window": "30d",
+    "units": "ratio",
+    "inputs": ["series:15"],
+    "minConsecutive": 1
   }
 ]

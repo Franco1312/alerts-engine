@@ -151,7 +151,25 @@ export class EvaluateAlertsUseCase {
         metricTs = metricSummary.ts;
       }
 
-      const evaluation = RuleEvaluator.evaluate(rule.condition, metricValue);
+      const evaluation = RuleEvaluator.evaluate(
+        rule.condition,
+        metricValue,
+        {
+          alertId: rule.alertId,
+          level: rule.level,
+          threshold: rule.threshold || 0,
+          units: rule.units || 'ratio',
+          ...(rule.inputs && { inputs: rule.inputs }),
+          ...(rule.notes && { notes: rule.notes }),
+          ...(rule.window?.from && {
+            window: `${rule.window.from} to ${rule.window.to}`,
+          }),
+        },
+        {
+          base_ts: metricTs,
+          oficial_fx_source: 'bcra', // TODO: Get from metric metadata
+        }
+      );
       const duration = Date.now() - startTime;
 
       logger.info({
@@ -174,12 +192,7 @@ export class EvaluateAlertsUseCase {
           ts: metricTs,
           level: evaluation.level,
           message: rule.message,
-          payload: {
-            value: metricValue,
-            threshold: evaluation.threshold,
-            condition: rule.condition,
-            metricId: rule.metricId,
-          },
+          payload: evaluation.payload || {},
         };
       }
 

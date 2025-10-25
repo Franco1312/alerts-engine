@@ -4,7 +4,10 @@ import { AlertsService, defaultAlertsService } from './alerts.service.js';
 import { logger } from '@/infrastructure/log/logger.js';
 import { API } from '@/infrastructure/log/log-events.js';
 
-const GetRecentAlertsSchema = z.object({
+const GetAlertsSchema = z.object({
+  from: z.string().optional(),
+  to: z.string().optional(),
+  level: z.enum(['red', 'amber', 'green']).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
 });
 
@@ -13,21 +16,18 @@ export class AlertsController {
     private readonly alertsService: AlertsService = defaultAlertsService
   ) {}
 
-  async getRecentAlerts(req: Request, res: Response): Promise<void> {
+  async getAlerts(req: Request, res: Response): Promise<void> {
     try {
-      const validatedData = GetRecentAlertsSchema.parse({
+      const validatedData = GetAlertsSchema.parse({
+        from: req.query.from,
+        to: req.query.to,
+        level: req.query.level,
         limit: req.query.limit,
       });
 
-      const alerts = await this.alertsService.getRecentAlerts(
-        validatedData.limit
-      );
+      const result = await this.alertsService.getAlerts(validatedData);
 
-      res.json({
-        alerts,
-        count: alerts.length,
-        limit: validatedData.limit,
-      });
+      res.json(result);
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({
@@ -43,6 +43,27 @@ export class AlertsController {
       logger.error({
         event: API.ERROR,
         msg: 'Alerts controller error',
+        err: error instanceof Error ? error.message : String(error),
+      });
+
+      res.status(500).json({
+        error: 'Internal server error',
+      });
+    }
+  }
+
+  async getRules(req: Request, res: Response): Promise<void> {
+    try {
+      const rules = await this.alertsService.getRules();
+
+      res.json({
+        rules,
+        count: rules.length,
+      });
+    } catch (error) {
+      logger.error({
+        event: API.ERROR,
+        msg: 'Rules controller error',
         err: error instanceof Error ? error.message : String(error),
       });
 

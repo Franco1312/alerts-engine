@@ -14,10 +14,28 @@ export interface Rule {
   level: AlertLevel;
   condition: string;
   message: string;
+  threshold?: number;
   window?: {
     from?: string;
     to?: string;
   };
+  units?: string;
+  inputs?: string[];
+  notes?: string;
+  minConsecutive?: number;
+}
+
+export interface EnrichedAlertPayload {
+  value: number;
+  value_pct: number;
+  threshold: number;
+  window?: string;
+  units: string;
+  inputs?: string[];
+  base_ts?: string;
+  oficial_fx_source?: string;
+  notes?: string;
+  [key: string]: unknown;
 }
 
 export interface MetricPoint {

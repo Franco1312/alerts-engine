@@ -1,10 +1,11 @@
-import { AlertLevel } from './alert.js';
+import { AlertLevel, EnrichedAlertPayload } from './alert.js';
 
 export interface EvaluationResult {
   triggered: boolean;
   value: number;
   threshold: string;
   level: AlertLevel;
+  payload?: EnrichedAlertPayload;
 }
 
 export class RuleEvaluator {
@@ -17,19 +18,45 @@ export class RuleEvaluator {
     '!=',
   ] as const;
 
-  static evaluate(condition: string, value: number): EvaluationResult {
+  static evaluate(
+    condition: string,
+    value: number,
+    rule: {
+      alertId: string;
+      level: AlertLevel;
+      threshold?: number;
+      units?: string;
+      inputs?: string[];
+      notes?: string;
+      window?: string;
+    },
+    metadata?: {
+      base_ts?: string;
+      oficial_fx_source?: string;
+    }
+  ): EvaluationResult {
     if (typeof value !== 'number' || isNaN(value)) {
       throw new Error(`Invalid value for evaluation: ${value}`);
     }
 
     const trimmedCondition = condition.trim();
+
+    // Handle complex conditions with AND
+    if (trimmedCondition.includes(' AND ')) {
+      return this.evaluateComplexCondition(
+        trimmedCondition,
+        value,
+        rule,
+        metadata
+      );
+    }
+
     const operator = this.findOperator(trimmedCondition);
 
     if (!operator) {
       throw new Error(`Invalid condition format: ${condition}`);
     }
 
-    // Remove "value" prefix if present
     let thresholdStr = trimmedCondition.replace(operator, '').trim();
     if (thresholdStr.startsWith('value')) {
       thresholdStr = thresholdStr.replace(/^value\s+/, '').trim();
@@ -42,12 +69,72 @@ export class RuleEvaluator {
 
     const triggered = this.compareValues(value, operator, threshold);
 
+    const payload = this.buildEnrichedPayload(value, rule, metadata);
+
     return {
       triggered,
       value,
       threshold: thresholdStr,
-      level: this.determineLevel(triggered, operator, threshold),
+      level: rule.level,
+      payload,
     };
+  }
+
+  private static evaluateComplexCondition(
+    condition: string,
+    value: number,
+    rule: any,
+    metadata?: any
+  ): EvaluationResult {
+    const parts = condition.split(' AND ');
+    if (parts.length !== 2) {
+      throw new Error(`Invalid complex condition format: ${condition}`);
+    }
+
+    const leftResult = this.evaluateSimpleCondition(
+      parts[0]?.trim() || '',
+      value
+    );
+    const rightResult = this.evaluateSimpleCondition(
+      parts[1]?.trim() || '',
+      value
+    );
+
+    const triggered = leftResult.triggered && rightResult.triggered;
+
+    const payload = this.buildEnrichedPayload(value, rule, metadata);
+
+    return {
+      triggered,
+      value,
+      threshold: condition,
+      level: rule.level,
+      payload,
+    };
+  }
+
+  private static evaluateSimpleCondition(
+    condition: string,
+    value: number
+  ): { triggered: boolean } {
+    const operator = this.findOperator(condition);
+    if (!operator) {
+      throw new Error(`Invalid simple condition format: ${condition}`);
+    }
+
+    let thresholdStr = condition.replace(operator, '').trim();
+    if (thresholdStr.startsWith('value')) {
+      thresholdStr = thresholdStr.replace(/^value\s+/, '').trim();
+    }
+    const threshold = parseFloat(thresholdStr);
+
+    if (isNaN(threshold)) {
+      throw new Error(`Invalid threshold value: ${thresholdStr}`);
+    }
+
+    const triggered = this.compareValues(value, operator, threshold);
+
+    return { triggered };
   }
 
   private static findOperator(condition: string): string | null {
@@ -79,49 +166,55 @@ export class RuleEvaluator {
       case '>':
         return value > threshold;
       case '==':
-        return Math.abs(value - threshold) < Number.EPSILON;
+        return value === threshold;
       case '!=':
-        return Math.abs(value - threshold) >= Number.EPSILON;
+        return value !== threshold;
       default:
         throw new Error(`Unsupported operator: ${operator}`);
     }
   }
 
-  private static determineLevel(
-    triggered: boolean,
-    operator: string,
-    threshold: number
-  ): AlertLevel {
-    if (!triggered) {
-      return 'green';
+  private static buildEnrichedPayload(
+    value: number,
+    rule: {
+      threshold?: number;
+      units?: string;
+      inputs?: string[];
+      notes?: string;
+      window?: string;
+    },
+    metadata?: {
+      base_ts?: string;
+      oficial_fx_source?: string;
+    }
+  ): EnrichedAlertPayload {
+    const payload: EnrichedAlertPayload = {
+      value,
+      value_pct: value * 100,
+      threshold: rule.threshold || 0,
+      units: rule.units || 'ratio',
+    };
+
+    if (rule.window) {
+      payload.window = rule.window;
     }
 
-    if (operator === '<=' || operator === '<') {
-      return threshold <= 0.002 ? 'red' : 'amber';
+    if (rule.inputs) {
+      payload.inputs = rule.inputs;
     }
 
-    if (operator === '>=' || operator === '>') {
-      return threshold >= 0.08 ? 'red' : 'amber';
+    if (metadata?.base_ts) {
+      payload.base_ts = metadata.base_ts;
     }
 
-    return 'amber';
-  }
-
-  static validateCondition(condition: string): boolean {
-    try {
-      const trimmedCondition = condition.trim();
-      const operator = this.findOperator(trimmedCondition);
-
-      if (!operator) {
-        return false;
-      }
-
-      const thresholdStr = trimmedCondition.replace(operator, '').trim();
-      const threshold = parseFloat(thresholdStr);
-
-      return !isNaN(threshold);
-    } catch {
-      return false;
+    if (metadata?.oficial_fx_source) {
+      payload.oficial_fx_source = metadata.oficial_fx_source;
     }
+
+    if (rule.notes) {
+      payload.notes = rule.notes;
+    }
+
+    return payload;
   }
 }

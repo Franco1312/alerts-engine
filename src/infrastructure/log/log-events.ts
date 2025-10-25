@@ -48,6 +48,7 @@ export const ALERTS = {
   GENERATED: 'ALERTS.GENERATED',
   ERROR: 'ALERTS.ERROR',
   GET_RECENT: 'ALERTS.GET_RECENT',
+  GET_RULES: 'ALERTS.GET_RULES',
 } as const;
 
 export const RULES = {
