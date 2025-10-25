@@ -226,3 +226,6 @@ export class AlertsRepository {
     }
   }
 }
+
+// Default instance for dependency injection
+export const defaultAlertsRepository = new AlertsRepository();

@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
-import { HealthService } from './health.service.js';
+import { HealthService, defaultHealthService } from './health.service.js';
 import { logger } from '@/infrastructure/log/logger.js';
 import { API } from '@/infrastructure/log/log-events.js';
 
 export class HealthController {
-  constructor(private healthService: HealthService) {}
+  constructor(
+    private readonly healthService: HealthService = defaultHealthService
+  ) {}
 
   async getHealth(req: Request, res: Response): Promise<void> {
     try {
@@ -26,3 +28,5 @@ export class HealthController {
     }
   }
 }
+
+export const defaultHealthController = new HealthController();

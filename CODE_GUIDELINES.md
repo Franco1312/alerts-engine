@@ -64,6 +64,52 @@ export interface SeriesProvider {
 - Repository implementations belong in `infrastructure/db/`
 - Domain services receive repository instances via dependency injection
 - Use singleton pattern for repository instances to reuse database connections
+
+### **Dependency Injection Pattern**
+
+All classes MUST use dependency injection with exported default instances:
+
+```typescript
+// ✅ CORRECT - Export default instances
+export const defaultMetricsClient = new MetricsClient();
+export const defaultAlertsRepository = new AlertsRepository();
+export const defaultEvaluateAlertsUseCase = new EvaluateAlertsUseCase(
+  defaultMetricsClient,
+  defaultAlertsRepository
+);
+
+// ✅ CORRECT - Use private readonly with default instances in constructor
+export class SomeService {
+  constructor(
+    private readonly metricsClient: MetricsClient = defaultMetricsClient,
+    private readonly alertsRepository: AlertsRepository = defaultAlertsRepository,
+    private readonly evaluateUseCase: EvaluateAlertsUseCase = defaultEvaluateAlertsUseCase
+  ) {}
+}
+
+// ❌ WRONG - Direct instantiation in constructor
+export class WrongService {
+  constructor() {
+    this.metricsClient = new MetricsClient(); // DON'T DO THIS
+  }
+}
+
+// ❌ WRONG - No default instances
+export class AlsoWrongService {
+  constructor(
+    private metricsClient: MetricsClient, // DON'T DO THIS
+    private alertsRepository: AlertsRepository
+  ) {}
+}
+```
+
+**Key Principles:**
+
+- Always export `default[ServiceName]` constants
+- Use `private readonly` with default instances
+- Constructor parameters are optional for testing/overrides
+- Default instances enable easy testing and configuration
+- Follow the pattern: `default[ServiceName] = new ServiceName()`
 - Repository singletons should be exported from `infrastructure/db/` modules
 
 ### **Import Management**

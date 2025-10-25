@@ -1,6 +1,15 @@
-import { MetricsClient } from '@/infrastructure/http/metricsClient.js';
-import { AlertsRepository } from '@/infrastructure/db/alertsRepo.js';
-import { RunDailyAlertsUseCase } from '@/application/use-cases/run-daily-alerts.use-case.js';
+import {
+  MetricsClient,
+  defaultMetricsClient,
+} from '@/infrastructure/http/metricsClient.js';
+import {
+  AlertsRepository,
+  defaultAlertsRepository,
+} from '@/infrastructure/db/alertsRepo.js';
+import {
+  RunDailyAlertsUseCase,
+  defaultRunDailyAlertsUseCase,
+} from '@/application/use-cases/run-daily-alerts.use-case.js';
 import { logger } from '@/infrastructure/log/logger.js';
 import { HEALTH } from '@/infrastructure/log/log-events.js';
 
@@ -19,9 +28,9 @@ export interface HealthStatus {
 
 export class HealthService {
   constructor(
-    private metricsClient: MetricsClient,
-    private alertsRepository: AlertsRepository,
-    private runDailyAlertsUseCase: RunDailyAlertsUseCase
+    private readonly metricsClient: MetricsClient = defaultMetricsClient,
+    private readonly alertsRepository: AlertsRepository = defaultAlertsRepository,
+    private readonly runDailyAlertsUseCase: RunDailyAlertsUseCase = defaultRunDailyAlertsUseCase
   ) {}
 
   async getHealthStatus(): Promise<HealthStatus> {
@@ -105,3 +114,5 @@ export class HealthService {
     }
   }
 }
+
+export const defaultHealthService = new HealthService();

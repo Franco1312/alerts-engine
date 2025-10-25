@@ -1,10 +1,15 @@
-import { MetricsClient } from '@/infrastructure/http/metricsClient.js';
+import {
+  MetricsClient,
+  defaultMetricsClient,
+} from '@/infrastructure/http/metricsClient.js';
 import { logger } from '@/infrastructure/log/logger.js';
 import { FETCH } from '@/infrastructure/log/log-events.js';
 import { LatestMetricsResponse } from '@/domain/alert.js';
 
 export class FetchLatestMetricsUseCase {
-  constructor(private metricsClient: MetricsClient) {}
+  constructor(
+    private readonly metricsClient: MetricsClient = defaultMetricsClient
+  ) {}
 
   async execute(metricIds: string[]): Promise<LatestMetricsResponse> {
     logger.info({
@@ -38,3 +43,5 @@ export class FetchLatestMetricsUseCase {
     }
   }
 }
+
+export const defaultFetchLatestMetricsUseCase = new FetchLatestMetricsUseCase();

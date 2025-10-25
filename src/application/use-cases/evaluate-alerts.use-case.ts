@@ -1,5 +1,11 @@
-import { FetchLatestMetricsUseCase } from './fetch-latest-metrics.use-case.js';
-import { FetchMetricWindowUseCase } from './fetch-metric-window.use-case.js';
+import {
+  FetchLatestMetricsUseCase,
+  defaultFetchLatestMetricsUseCase,
+} from './fetch-latest-metrics.use-case.js';
+import {
+  FetchMetricWindowUseCase,
+  defaultFetchMetricWindowUseCase,
+} from './fetch-metric-window.use-case.js';
 import { RuleEvaluator } from '@/domain/ruleEvaluator.js';
 import { logger } from '@/infrastructure/log/logger.js';
 import { RULES, EVALUATE } from '@/infrastructure/log/log-events.js';
@@ -11,8 +17,8 @@ export class EvaluateAlertsUseCase {
   private rules: Rule[] = [];
 
   constructor(
-    private fetchLatestMetricsUseCase: FetchLatestMetricsUseCase,
-    private fetchMetricWindowUseCase: FetchMetricWindowUseCase
+    private readonly fetchLatestMetricsUseCase: FetchLatestMetricsUseCase = defaultFetchLatestMetricsUseCase,
+    private readonly fetchMetricWindowUseCase: FetchMetricWindowUseCase = defaultFetchMetricWindowUseCase
   ) {
     this.loadRules();
   }
@@ -196,3 +202,5 @@ export class EvaluateAlertsUseCase {
     }
   }
 }
+
+export const defaultEvaluateAlertsUseCase = new EvaluateAlertsUseCase();

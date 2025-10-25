@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { z } from 'zod';
-import { AlertsService } from './alerts.service.js';
+import { AlertsService, defaultAlertsService } from './alerts.service.js';
 import { logger } from '@/infrastructure/log/logger.js';
 import { API } from '@/infrastructure/log/log-events.js';
 
@@ -9,7 +9,9 @@ const GetRecentAlertsSchema = z.object({
 });
 
 export class AlertsController {
-  constructor(private alertsService: AlertsService) {}
+  constructor(
+    private readonly alertsService: AlertsService = defaultAlertsService
+  ) {}
 
   async getRecentAlerts(req: Request, res: Response): Promise<void> {
     try {
@@ -50,3 +52,5 @@ export class AlertsController {
     }
   }
 }
+
+export const defaultAlertsController = new AlertsController();

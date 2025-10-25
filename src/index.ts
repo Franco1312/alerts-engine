@@ -5,12 +5,8 @@ import { config } from '@/infrastructure/config/env.js';
 import { logger } from '@/infrastructure/log/logger.js';
 import { SERVER } from '@/infrastructure/log/log-events.js';
 import { CronScheduler } from '@/infrastructure/sched/cron.js';
-import { MetricsClient } from '@/infrastructure/http/metricsClient.js';
-import { AlertsRepository } from '@/infrastructure/db/alertsRepo.js';
-import { FetchLatestMetricsUseCase } from '@/application/use-cases/fetch-latest-metrics.use-case.js';
-import { FetchMetricWindowUseCase } from '@/application/use-cases/fetch-metric-window.use-case.js';
-import { EvaluateAlertsUseCase } from '@/application/use-cases/evaluate-alerts.use-case.js';
-import { RunDailyAlertsUseCase } from '@/application/use-cases/run-daily-alerts.use-case.js';
+import { defaultAlertsRepository } from '@/infrastructure/db/alertsRepo.js';
+import { defaultRunDailyAlertsUseCase } from '@/application/use-cases/run-daily-alerts.use-case.js';
 import { healthRoutes } from '@/interfaces/rest/health/health.routes.js';
 import { alertsRoutes } from '@/interfaces/rest/alerts/alerts.routes.js';
 
@@ -36,28 +32,11 @@ app.use((err: Error, req: express.Request, res: express.Response) => {
 
 async function startServer(): Promise<void> {
   try {
-    const metricsClient = new MetricsClient();
-    const alertsRepository = new AlertsRepository();
+    await defaultAlertsRepository.initialize();
 
-    await alertsRepository.initialize();
-
-    const fetchLatestMetricsUseCase = new FetchLatestMetricsUseCase(
-      metricsClient
+    const scheduler = new CronScheduler(() =>
+      defaultRunDailyAlertsUseCase.execute()
     );
-    const fetchMetricWindowUseCase = new FetchMetricWindowUseCase(
-      metricsClient
-    );
-    const evaluateAlertsUseCase = new EvaluateAlertsUseCase(
-      fetchLatestMetricsUseCase,
-      fetchMetricWindowUseCase
-    );
-    const runDailyAlertsUseCase = new RunDailyAlertsUseCase(
-      metricsClient,
-      alertsRepository,
-      evaluateAlertsUseCase
-    );
-
-    const scheduler = new CronScheduler(() => runDailyAlertsUseCase.execute());
     scheduler.start();
 
     const server = app.listen(config.PORT, () => {
@@ -80,7 +59,7 @@ async function startServer(): Promise<void> {
       });
 
       scheduler.stop();
-      await alertsRepository.close();
+      await defaultAlertsRepository.close();
 
       server.close(() => {
         logger.info({
@@ -98,7 +77,7 @@ async function startServer(): Promise<void> {
       });
 
       scheduler.stop();
-      await alertsRepository.close();
+      await defaultAlertsRepository.close();
 
       server.close(() => {
         logger.info({

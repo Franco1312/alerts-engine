@@ -1,5 +1,11 @@
-import { AlertsRepository } from '@/infrastructure/db/alertsRepo.js';
-import { RunDailyAlertsUseCase } from '@/application/use-cases/run-daily-alerts.use-case.js';
+import {
+  AlertsRepository,
+  defaultAlertsRepository,
+} from '@/infrastructure/db/alertsRepo.js';
+import {
+  RunDailyAlertsUseCase,
+  defaultRunDailyAlertsUseCase,
+} from '@/application/use-cases/run-daily-alerts.use-case.js';
 import { isDatabaseEnabled } from '@/infrastructure/config/env.js';
 import { logger } from '@/infrastructure/log/logger.js';
 import { ALERTS } from '@/infrastructure/log/log-events.js';
@@ -7,8 +13,8 @@ import { Alert } from '@/domain/alert.js';
 
 export class AlertsService {
   constructor(
-    private alertsRepository: AlertsRepository,
-    private runDailyAlertsUseCase: RunDailyAlertsUseCase
+    private readonly alertsRepository: AlertsRepository = defaultAlertsRepository,
+    private readonly runDailyAlertsUseCase: RunDailyAlertsUseCase = defaultRunDailyAlertsUseCase
   ) {}
 
   async getRecentAlerts(limit: number = 50): Promise<Alert[]> {
@@ -63,3 +69,5 @@ export class AlertsService {
     }
   }
 }
+
+export const defaultAlertsService = new AlertsService();

@@ -216,3 +216,5 @@ export class MetricsClient {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 }
+
+export const defaultMetricsClient = new MetricsClient();

@@ -1,6 +1,15 @@
-import { MetricsClient } from '@/infrastructure/http/metricsClient.js';
-import { AlertsRepository } from '@/infrastructure/db/alertsRepo.js';
-import { EvaluateAlertsUseCase } from './evaluate-alerts.use-case.js';
+import {
+  MetricsClient,
+  defaultMetricsClient,
+} from '@/infrastructure/http/metricsClient.js';
+import {
+  AlertsRepository,
+  defaultAlertsRepository,
+} from '@/infrastructure/db/alertsRepo.js';
+import {
+  EvaluateAlertsUseCase,
+  defaultEvaluateAlertsUseCase,
+} from './evaluate-alerts.use-case.js';
 import { logger } from '@/infrastructure/log/logger.js';
 import { DAILY_RUN } from '@/infrastructure/log/log-events.js';
 import { Alert } from '@/domain/alert.js';
@@ -10,9 +19,9 @@ export class RunDailyAlertsUseCase {
   private lastRunAt: string | null = null;
 
   constructor(
-    private metricsClient: MetricsClient,
-    private alertsRepository: AlertsRepository,
-    private evaluateAlertsUseCase: EvaluateAlertsUseCase
+    private readonly metricsClient: MetricsClient = defaultMetricsClient,
+    private readonly alertsRepository: AlertsRepository = defaultAlertsRepository,
+    private readonly evaluateAlertsUseCase: EvaluateAlertsUseCase = defaultEvaluateAlertsUseCase
   ) {}
 
   async execute(): Promise<void> {
@@ -151,3 +160,5 @@ export class RunDailyAlertsUseCase {
     return [...this.lastRunAlerts];
   }
 }
+
+export const defaultRunDailyAlertsUseCase = new RunDailyAlertsUseCase();

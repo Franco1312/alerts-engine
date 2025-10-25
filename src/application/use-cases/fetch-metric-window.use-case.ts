@@ -1,4 +1,7 @@
-import { MetricsClient } from '@/infrastructure/http/metricsClient.js';
+import {
+  MetricsClient,
+  defaultMetricsClient,
+} from '@/infrastructure/http/metricsClient.js';
 import { logger } from '@/infrastructure/log/logger.js';
 import { FETCH } from '@/infrastructure/log/log-events.js';
 import { MetricPointsResponse } from '@/domain/alert.js';
@@ -11,7 +14,9 @@ export interface FetchMetricWindowParams {
 }
 
 export class FetchMetricWindowUseCase {
-  constructor(private metricsClient: MetricsClient) {}
+  constructor(
+    private readonly metricsClient: MetricsClient = defaultMetricsClient
+  ) {}
 
   async execute(
     params: FetchMetricWindowParams
@@ -57,3 +62,5 @@ export class FetchMetricWindowUseCase {
     }
   }
 }
+
+export const defaultFetchMetricWindowUseCase = new FetchMetricWindowUseCase();
